@@ -23,10 +23,12 @@ bool Iot_CreateDetachedThread( IotThreadRoutine_t threadRoutine,
         "detachable thread"
     };
     thread->start([=] {
-        tr_debug("entering detachable thread");
+        tr_info("entering detachable thread");
         threadRoutine(pArgument);
-        tr_debug("exiting detatchable thread");
-        delete thread;
+        tr_info("exiting detatchable thread %p", thread);
+        EventQueue *queue = mbed_event_queue();
+        queue->call_in(100ms, callback([=] { delete thread; }));
+        // delete thread;
     });
 
     return true;
