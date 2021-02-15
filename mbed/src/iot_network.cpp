@@ -60,24 +60,28 @@ struct NetworkConnection {
             if (flag_read & (uint32_t)Flags::termination) {
                 break;
             }
-
-            this->mtx.lock();
-            this->socket.set_blocking(false);
-            auto result = this->socket.recv(nullptr, 0);
-            this->socket.set_blocking(true);
-            this->mtx.unlock();
-
-            if (result == 0) {
+            nsapi_size_or_error_t result;
+            do {
                 this->mtx.lock();
-                auto cbk = this->on_recv;
-                auto ctx = this->on_recv_ctx;
+                this->socket.set_blocking(false);
+                result = this->socket.recv(nullptr, 0);
+                this->socket.set_blocking(true);
                 this->mtx.unlock();
-                // XXX: I don't think this really safe. cbk & ctx might be freed between the unlock
-                // and this call
-                if (cbk != NULL) {
-                    cbk(this, ctx); 
+
+                if (result == 0) {
+                    this->mtx.lock();
+                    auto cbk = this->on_recv;
+                    auto ctx = this->on_recv_ctx;
+                    this->mtx.unlock();
+                    // XXX: I don't think this really safe. cbk & ctx might be freed between the unlock
+                    // and this call
+                    if (cbk != NULL) {
+                        cbk(this, ctx);
+                    }
                 }
-            } else if (result != NSAPI_ERROR_WOULD_BLOCK) {
+            } while(result == 0);
+
+            if (result != NSAPI_ERROR_WOULD_BLOCK) {
                 break;
             }
         }
@@ -90,7 +94,7 @@ struct NetworkConnection {
             // and this call
             // Note: Currently cbk is always null because the IotMqtt library does not call setCloseCallback
             if (cbk != NULL) {
-                cbk(this, IOT_NETWORK_UNKNOWN_CLOSED, ctx); 
+                cbk(this, IOT_NETWORK_UNKNOWN_CLOSED, ctx);
             }
         }
         tr_info("Exiting event_dispatcher_thread");
@@ -138,7 +142,7 @@ static IotNetworkError_t network_new(IotNetworkServerInfo_t pServerInfo,
         }
     }
     */
- 
+
     {
         SocketAddress addr;
         res = net->gethostbyname(pServerInfo.hostname, &addr);
@@ -160,7 +164,7 @@ static IotNetworkError_t network_new(IotNetworkServerInfo_t pServerInfo,
         delete conn;
     } else {
         conn->thread.start({conn, &NetworkConnection::event_dispatcher_thread});
-        *pConnection = conn; 
+        *pConnection = conn;
     }
     IOT_FUNCTION_CLEANUP_END();
 }
@@ -174,7 +178,7 @@ static IotNetworkError_t network_set_receive_callback(IotNetworkConnection_t pCo
     pConnection->on_recv = receiveCallback;
     pConnection->socket.sigio({ pConnection, &NetworkConnection::on_event });
     pConnection->mtx.unlock();
-    return IOT_NETWORK_SUCCESS; 
+    return IOT_NETWORK_SUCCESS;
 }
 static IotNetworkError_t network_set_close_callback(IotNetworkConnection_t pConnection,
                                                     IotNetworkCloseCallback_t closeCallback,
@@ -186,7 +190,7 @@ static IotNetworkError_t network_set_close_callback(IotNetworkConnection_t pConn
     pConnection->on_close = closeCallback;
     pConnection->socket.sigio({ pConnection, &NetworkConnection::on_event });
     pConnection->mtx.unlock();
-    return IOT_NETWORK_SUCCESS; 
+    return IOT_NETWORK_SUCCESS;
 }
 static size_t network_send(IotNetworkConnection_t pConnection,
                            const uint8_t * pMessage,
@@ -198,7 +202,7 @@ static size_t network_send(IotNetworkConnection_t pConnection,
         tr_error("failed to send data with %d", res);
         return 0;
     }
-    
+
     return (size_t)res;
 }
 static size_t network_recv(IotNetworkConnection_t pConnection,
@@ -227,7 +231,7 @@ static IotNetworkError_t network_close(IotNetworkConnection_t pConnection){
     if (pConnection != NULL) {
         // Note: this function can be called by different threads - the main application thread to
         // disconnect the connection or the IotMqtt library as part of error handling, so we defer
-        // thread.join() until network_delete. 
+        // thread.join() until network_delete.
         pConnection->flags.set((uint32_t)NetworkConnection::Flags::termination);
         pConnection->mtx.lock();
         pConnection->socket.sigio(nullptr);
@@ -235,7 +239,7 @@ static IotNetworkError_t network_close(IotNetworkConnection_t pConnection){
         pConnection->mtx.unlock();
     }
 
-    return IOT_NETWORK_SUCCESS; 
+    return IOT_NETWORK_SUCCESS;
 }
 static IotNetworkError_t network_delete(IotNetworkConnection_t pConnection){
     if (pConnection != NULL) {
@@ -244,7 +248,7 @@ static IotNetworkError_t network_delete(IotNetworkConnection_t pConnection){
     }
     delete pConnection;
 
-    return IOT_NETWORK_SUCCESS; 
+    return IOT_NETWORK_SUCCESS;
 }
 
 
