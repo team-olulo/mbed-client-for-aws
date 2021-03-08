@@ -14,6 +14,8 @@ extern "C" {
 #include "iot_error.h"
 }
 
+extern nsapi_error_t _network_error;
+
 /* Private methods */
 static IotNetworkError_t network_new(IotNetworkServerInfo_t pServerInfo,
                                      IotNetworkCredentials_t pCredentialInfo,
@@ -155,6 +157,7 @@ static IotNetworkError_t network_new(IotNetworkServerInfo_t pServerInfo,
         res = conn->socket.connect(addr);
         if (NSAPI_ERROR_OK != res) {
             tr_error("failed to connect with : %d", res);
+            _network_error = res;
             IOT_SET_AND_GOTO_CLEANUP( IOT_NETWORK_FAILURE );
         }
     }
